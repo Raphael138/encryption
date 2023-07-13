@@ -30,6 +30,7 @@ title_font = pygame.font.SysFont('ebrima', 20, bold=True)
 text_font = pygame.font.SysFont('ebrima', 20)
 password = password_font.render('Password', True, black)
 text_font_height = text_font.get_height()
+search_font = pygame.font.SysFont('ebrima', 28)
 
 # Password boxes coordinates and the boxes
 pass_w, pass_h = password.get_size()
@@ -67,6 +68,13 @@ log_out_icon = pygame.transform.scale(log_out_icon, (50,50))
 # Add button
 add_button_box = pygame.Rect(screen_width-50, screen_height-50, 50,50)
 
+# Search button
+search_button_icon = pygame.image.load('search_icon.png')
+search_button_icon = pygame.transform.scale(search_button_icon, (50-2*linewidth,50-2*linewidth))
+search_bar = pygame.Rect(10,10, screen_width*3/4,50)
+searching = False
+search_text = ""
+
 # The first window which is where you enter the password
 def window1(screen):
     # Drawing rectangles around password text and input
@@ -94,6 +102,31 @@ def from_lstring_to_dict(password_add_ls):
             v = "" if len(kvs)==1 else ":".join(kvs[1:])
             d[kvs[0]] = v
     return d
+
+# Reorders the dictionary o based on what is searched
+def reorder(passwords_dict, search_text):
+    if search_text=="":
+        return passwords_dict
+    
+    search_text = search_text.lower()
+
+    passwords_website_titles = [[passwords_dict[i]['website'].lower(), i] for i in range(len(passwords_dict))]
+    pwt_grades = []
+    for web in passwords_website_titles:
+        grade = float("inf")
+
+        # sliding window to find matches
+        for i in range(0, len(web[0])-len(search_text)+1):
+            portion = web[0][i:i+len(search_text)+1]
+            new_grade = 100*sum([abs(ord(portion[i])-ord(search_text[i])) for i in range(0, len(search_text))])+i
+            grade = min(grade, new_grade)
+        
+        pwt_grades.append(grade)
+    
+    sorted_pwt = [pwt[1] for _, pwt in sorted(zip(pwt_grades, passwords_website_titles))]
+    new_passwords_dict = [passwords_dict[i] for i in sorted_pwt]
+
+    return new_passwords_dict
 
 # Render the boxes with passwords. Note: dict needs to have a 'website' key
 def render_password(screen, dict, top_y, window=3):
@@ -134,9 +167,9 @@ def render_password(screen, dict, top_y, window=3):
     
 # The second window with all the passwords
 def window2(screen):
-    global max_top
+    global max_top, searching
     # To allow for scrolling
-    top_y = -top
+    top_y = -top + 60
 
     for i in o:
         box_height = render_password(screen, i, top_y, window=2)
@@ -159,6 +192,17 @@ def window2(screen):
     pygame.draw.rect(screen, black, add_button_box, linewidth)
     pygame.draw.line(screen, black, (screen_width-45, screen_height-25), (screen_width-5, screen_height-25), width=2)
     pygame.draw.line(screen, black, (screen_width-25, screen_height-45), (screen_width-25, screen_height-5), width=2)
+
+    # Display the search bar
+    selected = search_bar.collidepoint((mouse_x, mouse_y)) 
+    if pygame.mouse.get_pressed()[0]:
+        searching = selected
+    bg_color = white if searching else light_grey  
+    pygame.draw.rect(screen, bg_color, search_bar)
+    pygame.draw.rect(screen, black, search_bar, linewidth)
+    screen.blit(search_button_icon, (10+linewidth,10+linewidth))
+    search_text_render = search_font.render(search_text, True, black)
+    screen.blit(search_text_render, (15+50, 33-int(0.5*search_font.get_height()))) 
 
 # Window 3, when the user is adding a set of passwords, usernames, etc...
 def window3(screen):
@@ -210,7 +254,16 @@ def input_window1(event):
 
 # Input for window2
 def input_window2(event):
-    global top, window, o, attempt_password
+    global top, window, o, attempt_password, searching, search_text
+    if event.type == pygame.KEYDOWN:
+        if searching:
+            o = reorder(o, search_text)
+            if event.key == pygame.K_RETURN:
+                searching = False
+            elif event.key == pygame.K_BACKSPACE:
+                search_text = search_text[:-1]
+            else:
+                search_text += event.unicode
     if event.type == pygame.MOUSEBUTTONDOWN:
         if event.button == 4:
             top-=50
@@ -287,5 +340,4 @@ while True:
 
     # Setting time between frames
     clock.tick(15)
-
     pygame.display.update()
